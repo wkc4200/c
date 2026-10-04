@@ -1,0 +1,17 @@
+{
+  "name": "HTML 실행기",
+  "short_name": "HTML 실행기",
+  "description": "파일 앱의 html 을 골라 바로 실행합니다",
+  "lang": "ko",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#141416",
+  "theme_color": "#141416",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

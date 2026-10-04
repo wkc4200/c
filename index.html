@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#141416" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="HTML 실행기" />
+  <meta name="format-detection" content="telephone=no" />
+  <title>HTML 실행기</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="icon" type="image/png" href="icon-192.png" />
+  <style>
+    :root {
+      --bg: #141416;
+      --panel: #1c1c1f;
+      --panel-2: #232327;
+      --line: #2e2e33;
+      --text: #e4e3df;
+      --muted: #8f8d88;
+      --faint: #5f5e5a;
+      --gold: #c9ae7c;
+      --gold-ink: #17150f;
+      --danger: #e0806f;
+      --font: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', system-ui, sans-serif;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 var(--font); -webkit-text-size-adjust: 100%; }
+    body { min-height: 100vh; -webkit-tap-highlight-color: transparent; }
+    button { font: inherit; color: inherit; }
+    [hidden] { display: none !important; }
+
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: calc(env(safe-area-inset-top) + 44px) calc(env(safe-area-inset-right) + 20px) calc(env(safe-area-inset-bottom) + 48px) calc(env(safe-area-inset-left) + 20px);
+    }
+    h1 { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.02em; }
+    .sub { margin: 6px 0 26px; color: var(--muted); }
+
+    .open {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 18px 20px;
+      border: 0;
+      border-radius: 16px;
+      background: var(--gold);
+      color: var(--gold-ink);
+      text-align: left;
+      cursor: pointer;
+    }
+    .open:active { filter: brightness(0.93); }
+    .open svg { width: 30px; height: 30px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .open b { display: block; font-size: 18px; }
+    .open small { display: block; font-size: 13.5px; opacity: 0.75; }
+
+    .tip { margin: 14px 0 0; padding: 12px 14px; border-radius: 12px; background: var(--panel); color: var(--muted); font-size: 14px; }
+    .tip b { color: var(--text); }
+
+    h2 { margin: 34px 0 10px; font-size: 15px; font-weight: 600; color: var(--muted); }
+    .list { list-style: none; margin: 0; padding: 0; border-radius: 16px; background: var(--panel); overflow: hidden; }
+    .list li { display: flex; align-items: center; border-top: 1px solid var(--line); }
+    .list li:first-child { border-top: 0; }
+    .list .item { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; padding: 12px 6px 12px 14px; border: 0; background: transparent; text-align: left; cursor: pointer; }
+    .list .item:active { background: var(--panel-2); }
+    .thumb { width: 46px; height: 46px; flex: none; border-radius: 11px; background: var(--panel-2); display: grid; place-items: center; overflow: hidden; color: var(--gold); font-weight: 700; font-size: 19px; border: 1px solid var(--line); }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .meta { min-width: 0; }
+    .meta .name { display: block; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .meta .info { display: block; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .more { flex: none; width: 48px; height: 48px; margin-right: 6px; border: 0; border-radius: 12px; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+    .more:active { background: var(--panel-2); }
+    .more svg { width: 22px; height: 22px; fill: currentColor; }
+    .empty { padding: 26px 18px; text-align: center; color: var(--muted); font-size: 14.5px; }
+
+    details.help { margin-top: 30px; color: var(--muted); font-size: 14.5px; }
+    details.help summary { cursor: pointer; color: var(--text); font-weight: 600; padding: 6px 0; }
+    details.help li { margin: 6px 0; }
+    details.help b { color: var(--text); }
+
+    /* 팝업 */
+    .overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: rgba(0, 0, 0, 0.55); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+    .dialog { width: min(440px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 22px 20px 16px; border-radius: 18px; background: #202024; border: 1px solid var(--line); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6); }
+    .dialog h3 { margin: 0 0 6px; font-size: 18px; }
+    .dialog p { margin: 0 0 14px; color: var(--muted); font-size: 14.5px; white-space: pre-line; }
+    .dialog input { width: 100%; margin: 4px 0 16px; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: 16px var(--font); outline: none; }
+    .dialog input:focus { border-color: var(--gold); }
+    .dialog .choices { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .dialog .choices button { padding: 11px 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); text-align: left; cursor: pointer; word-break: break-all; }
+    .dialog .choices button:active { background: var(--panel-2); }
+    .dialog .buttons { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+    .dialog .buttons button { min-width: 76px; padding: 10px 16px; border: 0; border-radius: 10px; background: var(--panel-2); cursor: pointer; }
+    .dialog .buttons button.primary { background: var(--gold); color: var(--gold-ink); font-weight: 600; }
+    .dialog .buttons button.danger { color: var(--danger); }
+
+    .toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 28px); transform: translateX(-50%); z-index: 60; padding: 10px 16px; border-radius: 12px; background: #2a2a2f; border: 1px solid var(--line); font-size: 14.5px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); transition: opacity 0.3s; }
+    .busy { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(0, 0, 0, 0.45); color: var(--text); font-size: 15px; }
+    .drop { position: fixed; inset: 12px; z-index: 40; display: grid; place-items: center; border: 2px dashed var(--gold); border-radius: 20px; background: rgba(20, 20, 22, 0.88); color: var(--gold); font-size: 20px; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>HTML 실행기</h1>
+    <p class="sub">파일 앱의 html 을 골라 바로 실행합니다. 한 번 연 것은 아래 목록에 보관됩니다.</p>
+
+    <button class="open" id="open" type="button">
+      <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10v6M9 13h6"/></svg>
+      <span><b>파일 열기</b><small>html 파일 · zip 파일 · 앱 파일 여러 개를 한꺼번에</small></span>
+    </button>
+    <p class="tip" id="install-tip" hidden>
+      <b>먼저 홈 화면에 추가하세요.</b> Safari 공유 버튼 → <b>홈 화면에 추가</b> → 홈 화면의 아이콘으로 열어서 쓰면 전체 화면으로 열리고, 인터넷 없이도 실행됩니다.
+      (Safari 와 홈 화면 앱은 보관함이 따로라서, 홈 화면 앱에서 파일을 열어 주세요.)
+    </p>
+
+    <h2>보관한 html</h2>
+    <ul class="list" id="list"></ul>
+
+    <details class="help">
+      <summary>사용법</summary>
+      <ul>
+        <li><b>html 파일 하나</b>: 그대로 고르면 됩니다. 여러 개를 한꺼번에 고르면 각각 따로 목록에 들어갑니다.</li>
+        <li><b>파일이 여러 개인 앱</b>(html + js + css + 그림): 그 파일들을 <b>한꺼번에 모두</b> 고르세요. 하나의 앱으로 묶입니다.</li>
+        <li><b>폴더째 들어 있는 앱</b>: 파일 앱에서 폴더를 길게 눌러 <b>압축</b> → 생긴 zip 파일을 고르세요. 폴더 구조가 그대로 유지됩니다.</li>
+        <li>실행 중인 화면 가장자리의 <b>둥근 버튼</b>을 누르면 이 목록으로 돌아옵니다. 버튼은 끌어서 옮길 수 있습니다.</li>
+        <li>같은 파일을 다시 열면 <b>바꾸기</b>(새 버전으로 교체)를 고를 수 있습니다.</li>
+        <li>보관한 앱들은 같은 저장 공간을 함께 씁니다. 앱이 저장한 데이터(설정·자동 저장 등)는 목록에서 지워도 남아 있을 수 있습니다.</li>
+      </ul>
+    </details>
+  </div>
+
+  <input type="file" id="file" multiple hidden />
+
+  <script>
+    (() => {
+      'use strict';
+
+      // ── 기본 ─────────────────────────────────────────────────────────────
+      const $ = (id) => document.getElementById(id);
+      const APPS_CACHE = 'html-apps';
+      const META_KEY = 'launcher.apps';
+      const BASE = new URL('./', location.href).href; // 이 실행기가 있는 주소
+      const RUN = BASE + 'run/';
+      const isIOS = /iP(ad|hone|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const isStandalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+
+      const MIME = {
+        html: 'text/html; charset=utf-8', htm: 'text/html; charset=utf-8', xhtml: 'application/xhtml+xml',
+        js: 'text/javascript; charset=utf-8', mjs: 'text/javascript; charset=utf-8', cjs: 'text/javascript; charset=utf-8',
+        css: 'text/css; charset=utf-8', json: 'application/json; charset=utf-8', webmanifest: 'application/manifest+json; charset=utf-8',
+        map: 'application/json; charset=utf-8', txt: 'text/plain; charset=utf-8', md: 'text/plain; charset=utf-8', csv: 'text/csv; charset=utf-8',
+        xml: 'application/xml', svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+        webp: 'image/webp', avif: 'image/avif', ico: 'image/x-icon', bmp: 'image/bmp',
+        woff: 'font/woff', woff2: 'font/woff2', ttf: 'font/ttf', otf: 'font/otf',
+        mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', ogg: 'audio/ogg', mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
+        pdf: 'application/pdf', wasm: 'application/wasm', zip: 'application/zip',
+      };
+      const extOf = (p) => { const m = /\.([^./]+)$/.exec(p); return m ? m[1].toLowerCase() : ''; };
+      const isHTML = (p) => /\.(html?|xhtml)$/i.test(p);
+      const isZip = (f) => extOf(f.name) === 'zip';
+      const baseName = (p) => p.split('/').pop();
+      const stripExt = (n) => n.replace(/\.[^.]+$/, '');
+      const encodePath = (p) => p.split('/').map(encodeURIComponent).join('/');
+      const runURL = (id, path) => RUN + encodeURIComponent(id) + '/' + encodePath(path);
+      const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+      function fmtSize(n) {
+        if (n >= 1048576) return (n / 1048576).toFixed(1) + 'MB';
+        return Math.max(1, Math.round(n / 1024)) + 'KB';
+      }
+
+      // ── 목록 정보(localStorage) ──────────────────────────────────────────
+      function loadMeta() {
+        try { const v = JSON.parse(localStorage.getItem(META_KEY)); return Array.isArray(v) ? v : []; } catch { return []; }
+      }
+      function saveMeta(list) {
+        try { localStorage.setItem(META_KEY, JSON.stringify(list)); } catch { /* 무시 */ }
+      }
+
+      // ── 팝업 / 알림 ──────────────────────────────────────────────────────
+      let dialogs = 0;
+      function dialog({ title, message, input, choices, buttons = [], cancelValue = null }) {
+        return new Promise((resolve) => {
+          dialogs++;
+          const ov = document.createElement('div');
+          ov.className = 'overlay';
+          const box = document.createElement('div');
+          box.className = 'dialog';
+          box.setAttribute('role', 'dialog');
+          if (title) { const h = document.createElement('h3'); h.textContent = title; box.appendChild(h); }
+          if (message) { const p = document.createElement('p'); p.textContent = message; box.appendChild(p); }
+          let field = null;
+          if (input) {
+            field = document.createElement('input');
+            field.type = 'text';
+            field.value = input.value || '';
+            field.autocomplete = 'off';
+            field.spellcheck = false;
+            box.appendChild(field);
+          }
+          let done = false;
+          const close = (v) => {
+            if (done) return;
+            done = true;
+            dialogs--;
+            document.removeEventListener('keydown', onKey, true);
+            ov.remove();
+            resolve(field && v !== cancelValue ? { value: v, input: field.value } : v);
+          };
+          if (choices) {
+            const wrap = document.createElement('div');
+            wrap.className = 'choices';
+            for (const c of choices) {
+              const b = document.createElement('button');
+              b.type = 'button';
+              b.textContent = c.label;
+              b.addEventListener('click', () => close(c.value));
+              wrap.appendChild(b);
+            }
+            box.appendChild(wrap);
+          }
+          const row = document.createElement('div');
+          row.className = 'buttons';
+          for (const btn of buttons) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = btn.kind || '';
+            b.textContent = btn.label;
+            b.addEventListener('click', () => close(btn.value));
+            row.appendChild(b);
+          }
+          box.appendChild(row);
+          ov.appendChild(box);
+          ov.addEventListener('mousedown', (e) => { if (e.target === ov) close(cancelValue); });
+          const onKey = (e) => {
+            if (e.key === 'Escape') { e.preventDefault(); close(cancelValue); }
+            else if (e.key === 'Enter' && !e.isComposing && field && document.activeElement === field) {
+              e.preventDefault();
+              const p = buttons.find((b) => b.kind === 'primary');
+              if (p) close(p.value);
+            }
+          };
+          document.addEventListener('keydown', onKey, true);
+          document.body.appendChild(ov);
+          if (field) { field.focus(); field.select(); }
+        });
+      }
+      const alertBox = (title, message) => dialog({ title, message, buttons: [{ label: '확인', value: true, kind: 'primary' }], cancelValue: true });
+
+      function toast(msg) {
+        document.querySelectorAll('.toast').forEach((t) => t.remove());
+        const t = document.createElement('div');
+        t.className = 'toast';
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(() => (t.style.opacity = '0'), 1800);
+        setTimeout(() => t.remove(), 2200);
+      }
+
+      function busy(on, text = '여는 중…') {
+        let b = document.querySelector('.busy');
+        if (on) {
+          if (!b) { b = document.createElement('div'); b.className = 'busy'; document.body.appendChild(b); }
+          b.textContent = text;
+        } else if (b) b.remove();
+      }
+
+      // ── 글자 디코딩 ──────────────────────────────────────────────────────
+      function decodeText(bytes) {
+        if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) return new TextDecoder('utf-8').decode(bytes.subarray(3));
+        if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder('utf-16le').decode(bytes.subarray(2));
+        if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder('utf-16be').decode(bytes.subarray(2));
+        try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { /* 다음 */ }
+        try {
+          const t = new TextDecoder('euc-kr').decode(bytes);
+          if (!t.includes('�')) return t;
+        } catch { /* 다음 */ }
+        return new TextDecoder('utf-8').decode(bytes);
+      }
+
+      // html 안의 charset 선언을 utf-8 로 (실행기가 utf-8 로 바꿔 보관하므로)
+      function fixCharset(html) {
+        return html
+          .replace(/<meta\s+charset\s*=\s*["']?[\w-]+["']?\s*\/?>/i, '<meta charset="utf-8">')
+          .replace(/(<meta[^>]+content\s*=\s*["'][^"']*charset=)[\w-]+/i, '$1utf-8');
+      }
+
+      // ── zip 풀기 ────────────────────────────────────────────────────────
+      async function inflateRaw(data) {
+        if (typeof DecompressionStream === 'undefined') throw new Error('이 iPad 의 Safari 가 오래되어 압축을 풀 수 없습니다. iPadOS 를 업데이트하세요.');
+        const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+        return new Uint8Array(await new Response(stream).arrayBuffer());
+      }
+
+      function decodeName(bytes, utf8Flag) {
+        if (utf8Flag) return new TextDecoder('utf-8').decode(bytes);
+        try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { /* 다음 */ }
+        try { return new TextDecoder('euc-kr').decode(bytes); } catch { return new TextDecoder('utf-8').decode(bytes); }
+      }
+
+      async function unzip(file) {
+        const buf = new Uint8Array(await file.arrayBuffer());
+        const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+        let eocd = -1;
+        for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) {
+          if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+        }
+        if (eocd < 0) throw new Error('zip 파일을 읽을 수 없습니다.');
+        const count = dv.getUint16(eocd + 10, true);
+        let p = dv.getUint32(eocd + 16, true);
+        if (p === 0xffffffff) throw new Error('너무 큰 zip(zip64)은 지원하지 않습니다.');
+        const out = [];
+        for (let n = 0; n < count; n++) {
+          if (dv.getUint32(p, true) !== 0x02014b50) throw new Error('zip 구조가 올바르지 않습니다.');
+          const flags = dv.getUint16(p + 8, true);
+          const method = dv.getUint16(p + 10, true);
+          const csize = dv.getUint32(p + 20, true);
+          const nlen = dv.getUint16(p + 28, true);
+          const xlen = dv.getUint16(p + 30, true);
+          const clen = dv.getUint16(p + 32, true);
+          const lho = dv.getUint32(p + 42, true);
+          const name = decodeName(buf.subarray(p + 46, p + 46 + nlen), flags & 0x800);
+          p += 46 + nlen + xlen + clen;
+          if (name.endsWith('/')) continue;
+          if (flags & 1) throw new Error('암호가 걸린 zip 은 열 수 없습니다.');
+          const start = lho + 30 + dv.getUint16(lho + 26, true) + dv.getUint16(lho + 28, true);
+          const data = buf.subarray(start, start + csize);
+          let bytes;
+          if (method === 0) bytes = data.slice();
+          else if (method === 8) bytes = await inflateRaw(data);
+          else throw new Error(`지원하지 않는 압축 방식입니다 (${name}).`);
+          out.push({ path: name, blob: new Blob([bytes]) });
+        }
+        return out;
+      }
+
+      // ── 파일 정리 ───────────────────────────────────────────────────────
+      function cleanPath(p) {
+        return p.replace(/\\/g, '/').replace(/^(\.\/)+/, '').replace(/^\/+/, '');
+      }
+      function isJunk(p) {
+        return /(^|\/)__MACOSX\//.test(p) || /(^|\/)\.DS_Store$/.test(p) || /(^|\/)\._/.test(p) || /(^|\/)Thumbs\.db$/i.test(p);
+      }
+      function stripCommonFolder(entries) {
+        if (!entries.length) return entries;
+        const first = entries[0].path.split('/');
+        if (first.length < 2) return entries;
+        const top = first[0] + '/';
+        if (!entries.every((e) => e.path.startsWith(top))) return entries;
+        return stripCommonFolder(entries.map((e) => ({ ...e, path: e.path.slice(top.length) })));
+      }
+
+      /** 고른 파일들을 앱 묶음으로 나눈다. */
+      async function makeBundles(fileList) {
+        const files = Array.from(fileList);
+        const bundles = [];
+        const loose = [];
+        for (const f of files) {
+          if (isZip(f)) {
+            let entries = (await unzip(f)).map((e) => ({ ...e, path: cleanPath(e.path) })).filter((e) => e.path && !isJunk(e.path));
+            entries = stripCommonFolder(entries);
+            if (!entries.some((e) => isHTML(e.path))) throw new Error(`"${f.name}" 안에 html 파일이 없습니다.`);
+            bundles.push({ source: f.name, fallbackName: stripExt(f.name), entries });
+          } else {
+            loose.push(f);
+          }
+        }
+        if (loose.length) {
+          const htmls = loose.filter((f) => isHTML(f.name));
+          if (!htmls.length) {
+            if (!bundles.length) throw new Error('html 파일이 없습니다. html 파일(또는 html 이 든 zip)을 함께 골라 주세요.');
+            // 다른 묶음과 같이 고른 파일은 무시
+          } else if (htmls.length === loose.length) {
+            // html 만 여러 개 → 각각 따로
+            for (const f of htmls) bundles.push({ source: f.name, fallbackName: stripExt(f.name), entries: [{ path: f.name, blob: f }] });
+          } else {
+            const start = htmls.find((f) => /^index\.html?$/i.test(f.name));
+            bundles.push({
+              source: (start || htmls[0]).name + (loose.length > 1 ? ` 외 ${loose.length - 1}개` : ''),
+              fallbackName: stripExt((start || htmls[0]).name),
+              entries: loose.map((f) => ({ path: f.name, blob: f })),
+            });
+          }
+        }
+        return bundles;
+      }
+
+      async function chooseStart(bundle) {
+        const htmls = bundle.entries.map((e) => e.path).filter(isHTML);
+        if (htmls.length === 1) return htmls[0];
+        const depth = (p) => p.split('/').length;
+        const minDepth = Math.min(...htmls.map(depth));
+        const top = htmls.filter((p) => depth(p) === minDepth);
+        const index = top.find((p) => /^(.*\/)?index\.html?$/i.test(p));
+        if (index) return index;
+        if (top.length === 1) return top[0];
+        busy(false);
+        const pick = await dialog({
+          title: '처음 열 페이지를 고르세요',
+          message: `"${bundle.fallbackName}" 안에 html 파일이 여러 개 있습니다.`,
+          choices: htmls.sort().map((p) => ({ label: p, value: p })),
+          buttons: [{ label: '취소', value: null }],
+        });
+        return pick;
+      }
+
+      function titleOf(html) {
+        const m = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
+        if (!m) return '';
+        const div = document.createElement('div');
+        div.innerHTML = m[1];
+        return div.textContent.replace(/\s+/g, ' ').trim().slice(0, 80);
+      }
+
+      function findIcon(paths) {
+        const pngs = paths.filter((p) => /\.(png|jpe?g|webp)$/i.test(p));
+        return (
+          pngs.find((p) => /apple-touch-icon/i.test(p)) ||
+          pngs.find((p) => /icon[^/]*(180|192|256|512)/i.test(p)) ||
+          pngs.find((p) => /(^|\/)(icon|logo)[^/]*$/i.test(p)) ||
+          ''
+        );
+      }
+
+      // ── 보관 ────────────────────────────────────────────────────────────
+      async function deleteFiles(id) {
+        const cache = await caches.open(APPS_CACHE);
+        const prefix = RUN + encodeURIComponent(id) + '/';
+        const keys = await cache.keys();
+        await Promise.all(keys.filter((k) => k.url.startsWith(prefix)).map((k) => cache.delete(k)));
+      }
+
+      async function install(bundle) {
+        const start = await chooseStart(bundle);
+        if (!start) return null;
+        busy(true, '보관하는 중…');
+        const list = loadMeta();
+        const same = list.find((a) => a.source === bundle.source);
+        let id = uid();
+        let replacing = null;
+        if (same) {
+          busy(false);
+          const choice = await dialog({
+            title: `"${same.name}"이(가) 이미 있습니다`,
+            message: '새 파일로 바꿀까요, 따로 하나 더 추가할까요?',
+            buttons: [
+              { label: '취소', value: null },
+              { label: '따로 추가', value: 'add' },
+              { label: '바꾸기', value: 'replace', kind: 'primary' },
+            ],
+          });
+          if (!choice) return null;
+          if (choice === 'replace') { replacing = same; id = same.id; }
+          busy(true, '보관하는 중…');
+        }
+
+        const cache = await caches.open(APPS_CACHE);
+        if (replacing) await deleteFiles(id);
+        let size = 0;
+        let title = '';
+        for (const e of bundle.entries) {
+          let body = e.blob;
+          let type = MIME[extOf(e.path)] || 'application/octet-stream';
+          if (isHTML(e.path)) {
+            const text = fixCharset(decodeText(new Uint8Array(await e.blob.arrayBuffer())));
+            if (e.path === start) title = titleOf(text);
+            body = new Blob([text], { type: 'text/html' });
+            type = 'text/html; charset=utf-8';
+          }
+          size += body.size;
+          await cache.put(new Request(runURL(id, e.path)), new Response(body, { headers: { 'Content-Type': type } }));
+        }
+        const now = Date.now();
+        const meta = {
+          id,
+          name: replacing ? replacing.name : title || bundle.fallbackName,
+          source: bundle.source,
+          start,
+          icon: findIcon(bundle.entries.map((e) => e.path)),
+          files: bundle.entries.length,
+          size,
+          addedAt: replacing ? replacing.addedAt : now,
+          updatedAt: now,
+          openedAt: replacing ? replacing.openedAt : 0,
+        };
+        const next = loadMeta().filter((a) => a.id !== id);
+        next.push(meta);
+        saveMeta(next);
+        return meta;
+      }
+
+      async function handleFiles(fileList) {
+        if (!fileList || !fileList.length) return;
+        if (!('caches' in window)) {
+          alertBox('보관할 수 없습니다', 'https 주소(GitHub Pages)로 열어야 합니다.');
+          return;
+        }
+        busy(true);
+        const added = [];
+        try {
+          if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+          const bundles = await makeBundles(fileList);
+          for (const b of bundles) {
+            const meta = await install(b);
+            if (meta) added.push(meta);
+          }
+        } catch (e) {
+          busy(false);
+          const msg = e && e.name === 'QuotaExceededError' ? '저장 공간이 부족합니다.' : (e && e.message) || String(e);
+          await alertBox('열 수 없습니다', msg);
+        }
+        busy(false);
+        render();
+        if (added.length === 1) openApp(added[0].id);
+        else if (added.length > 1) toast(`${added.length}개를 보관했습니다`);
+      }
+
+      async function openApp(id) {
+        const list = loadMeta();
+        const app = list.find((a) => a.id === id);
+        if (!app) return;
+        app.openedAt = Date.now();
+        saveMeta(list);
+        if (navigator.serviceWorker) {
+          busy(true);
+          try {
+            await Promise.race([navigator.serviceWorker.ready, new Promise((r) => setTimeout(r, 4000))]);
+          } catch { /* 무시 */ }
+        }
+        location.href = runURL(app.id, app.start);
+      }
+
+      // ── 목록 화면 ───────────────────────────────────────────────────────
+      const fmtDate = new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+      function render() {
+        const ul = $('list');
+        ul.textContent = '';
+        const list = loadMeta().sort((a, b) => (b.openedAt || b.updatedAt) - (a.openedAt || a.updatedAt));
+        if (!list.length) {
+          const li = document.createElement('li');
+          li.className = 'empty';
+          li.textContent = '아직 없습니다. [파일 열기]로 html 파일을 골라 보세요.';
+          ul.appendChild(li);
+          return;
+        }
+        for (const app of list) {
+          const li = document.createElement('li');
+          const item = document.createElement('button');
+          item.type = 'button';
+          item.className = 'item';
+          const thumb = document.createElement('span');
+          thumb.className = 'thumb';
+          const letter = () => { thumb.textContent = (app.name.trim()[0] || '?').toUpperCase(); };
+          if (app.icon) {
+            const img = document.createElement('img');
+            img.alt = '';
+            img.src = runURL(app.id, app.icon);
+            img.onerror = () => { img.remove(); letter(); };
+            thumb.appendChild(img);
+          } else letter();
+          const meta = document.createElement('span');
+          meta.className = 'meta';
+          const name = document.createElement('span');
+          name.className = 'name';
+          name.textContent = app.name;
+          const info = document.createElement('span');
+          info.className = 'info';
+          info.textContent = `${app.files > 1 ? `파일 ${app.files}개 · ` : ''}${fmtSize(app.size)} · ${fmtDate.format(new Date(app.updatedAt))} 보관`;
+          meta.append(name, info);
+          item.append(thumb, meta);
+          item.addEventListener('click', () => openApp(app.id));
+          const more = document.createElement('button');
+          more.type = 'button';
+          more.className = 'more';
+          more.setAttribute('aria-label', `${app.name} 메뉴`);
+          more.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
+          more.addEventListener('click', () => appMenu(app.id));
+          li.append(item, more);
+          ul.appendChild(li);
+        }
+      }
+
+      async function appMenu(id) {
+        const app = loadMeta().find((a) => a.id === id);
+        if (!app) return;
+        const action = await dialog({
+          title: app.name,
+          message: `${app.source}\n처음 페이지: ${app.start}`,
+          choices: [
+            { label: '열기', value: 'open' },
+            { label: '이름 바꾸기', value: 'rename' },
+            { label: '목록에서 지우기', value: 'delete' },
+          ],
+          buttons: [{ label: '닫기', value: null }],
+        });
+        if (action === 'open') openApp(id);
+        else if (action === 'rename') {
+          const r = await dialog({
+            title: '이름 바꾸기',
+            input: { value: app.name },
+            buttons: [{ label: '취소', value: null }, { label: '저장', value: true, kind: 'primary' }],
+          });
+          if (r && r.value && r.input.trim()) {
+            const list = loadMeta();
+            const a = list.find((x) => x.id === id);
+            a.name = r.input.trim();
+            saveMeta(list);
+            render();
+          }
+        } else if (action === 'delete') {
+          const ok = await dialog({
+            title: `"${app.name}"을(를) 지울까요?`,
+            message: '실행기에 보관한 사본만 지워집니다. 파일 앱의 원본은 그대로입니다.',
+            buttons: [{ label: '취소', value: false }, { label: '지우기', value: true, kind: 'danger' }],
+            cancelValue: false,
+          });
+          if (ok) {
+            await deleteFiles(id);
+            saveMeta(loadMeta().filter((a) => a.id !== id));
+            render();
+            toast('지웠습니다');
+          }
+        }
+      }
+
+      // ── 연결 ────────────────────────────────────────────────────────────
+      $('open').addEventListener('click', () => $('file').click());
+      $('file').addEventListener('change', () => {
+        const files = Array.from($('file').files || []);
+        $('file').value = '';
+        handleFiles(files);
+      });
+
+      let dragDepth = 0;
+      let zone = null;
+      addEventListener('dragenter', (e) => {
+        if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
+        dragDepth++;
+        if (!zone) { zone = document.createElement('div'); zone.className = 'drop'; zone.textContent = '여기에 놓으면 엽니다'; document.body.appendChild(zone); }
+      });
+      addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth && zone) { zone.remove(); zone = null; } });
+      addEventListener('dragover', (e) => e.preventDefault());
+      addEventListener('drop', (e) => {
+        e.preventDefault();
+        dragDepth = 0;
+        if (zone) { zone.remove(); zone = null; }
+        if (e.dataTransfer && e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+      });
+      // 앱에서 돌아왔을 때(뒤로 가기 캐시) 화면 정리
+      addEventListener('pageshow', () => { busy(false); render(); });
+
+      $('install-tip').hidden = !(isIOS && !isStandalone);
+      render();
+      if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+
+      window.__launcher = { loadMeta, makeBundles, unzip };
+    })();
+  </script>
+</body>
+</html>
