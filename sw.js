@@ -2,7 +2,7 @@
 // - 실행기 화면 파일: 인터넷이 되면 최신, 안 되면 저장해 둔 것
 // - run/<앱id>/... 주소: 실행기에 보관한 html·파일을 꺼내 준다 (인터넷 없이도 열림)
 // 실행기 파일을 고치면 VERSION 숫자를 하나 올려 주세요.
-const VERSION = 'launcher-v1';
+const VERSION = 'launcher-v2';
 const APPS = 'html-apps'; // 보관한 앱 파일 (VERSION 이 바뀌어도 지우지 않음)
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
@@ -79,9 +79,65 @@ async function serveApp(url) {
   }
   if (!res) return notFound(rel);
   const type = res.headers.get('Content-Type') || '';
-  if (!type.startsWith('text/html')) return res;
-  const html = await res.text();
-  return new Response(inject(html), { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  if (!type.startsWith('text/html') || !res.body) return res;
+  return injectStream(res);
+}
+
+// html 을 통째로 읽지 않고(수백 MB 파일 대비) 앞부분만 보고 스크립트를 끼워 흘려보낸다.
+const HEAD_LIMIT = 262144;
+function findInjectAt(bytes, final) {
+  // 1바이트 = 1글자로 읽어서 위치 = 바이트 위치
+  const text = new TextDecoder('windows-1252').decode(bytes);
+  for (const re of [/<head(\s[^>]*)?>/i, /<html(\s[^>]*)?>/i, /<!doctype[^>]*>/i]) {
+    const m = text.match(re);
+    if (m) return m.index + m[0].length;
+    if (!final) return -1; // <head> 를 아직 못 봤으면 조금 더 읽는다
+  }
+  return 0;
+}
+
+async function injectStream(res) {
+  const reader = res.body.getReader();
+  let buf = new Uint8Array(0);
+  let at = -1;
+  let ended = false;
+  while (buf.length < HEAD_LIMIT) {
+    const { value, done } = await reader.read();
+    if (done) {
+      ended = true;
+      break;
+    }
+    const next = new Uint8Array(buf.length + value.length);
+    next.set(buf);
+    next.set(value, buf.length);
+    buf = next;
+    at = findInjectAt(buf, false);
+    if (at >= 0) break;
+  }
+  if (at < 0) at = findInjectAt(buf.subarray(0, HEAD_LIMIT), true);
+  const script = new TextEncoder().encode(`<script>${injectedScript()}</script>`);
+  const first = buf.subarray(0, at);
+  const rest = buf.subarray(at);
+  const stream = new ReadableStream({
+    start(c) {
+      if (first.length) c.enqueue(first);
+      c.enqueue(script);
+      if (rest.length) c.enqueue(rest);
+      if (ended) c.close();
+    },
+    async pull(c) {
+      if (ended) return;
+      const { value, done } = await reader.read();
+      if (done) {
+        ended = true;
+        c.close();
+      } else c.enqueue(value);
+    },
+    cancel(reason) {
+      reader.cancel(reason);
+    },
+  });
+  return new Response(stream, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
 function notFound(rel) {
@@ -148,16 +204,4 @@ if(a==='home'){try{window.dispatchEvent(new Event('pagehide'));}catch(e){}fab.st
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
 })();`;
-}
-
-function inject(html) {
-  const tag = `<script>${injectedScript()}</script>`;
-  for (const re of [/<head(\s[^>]*)?>/i, /<html(\s[^>]*)?>/i, /<!doctype[^>]*>/i]) {
-    const m = html.match(re);
-    if (m) {
-      const at = m.index + m[0].length;
-      return html.slice(0, at) + tag + html.slice(at);
-    }
-  }
-  return tag + html;
 }

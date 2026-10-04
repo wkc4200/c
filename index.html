@@ -150,6 +150,7 @@
       const isIOS = /iP(ad|hone|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
       const isStandalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
 
+      const BIG_HTML = 20 * 1024 * 1024; // 이보다 큰 html 은 통째로 글자로 바꾸지 않는다
       const MIME = {
         html: 'text/html; charset=utf-8', htm: 'text/html; charset=utf-8', xhtml: 'application/xhtml+xml',
         js: 'text/javascript; charset=utf-8', mjs: 'text/javascript; charset=utf-8', cjs: 'text/javascript; charset=utf-8',
@@ -292,30 +293,33 @@
       }
 
       // ── zip 풀기 ────────────────────────────────────────────────────────
-      async function inflateRaw(data) {
-        if (typeof DecompressionStream === 'undefined') throw new Error('이 iPad 의 Safari 가 오래되어 압축을 풀 수 없습니다. iPadOS 를 업데이트하세요.');
-        const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-        return new Uint8Array(await new Response(stream).arrayBuffer());
-      }
-
       function decodeName(bytes, utf8Flag) {
         if (utf8Flag) return new TextDecoder('utf-8').decode(bytes);
         try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { /* 다음 */ }
         try { return new TextDecoder('euc-kr').decode(bytes); } catch { return new TextDecoder('utf-8').decode(bytes); }
       }
 
+      const readBytes = async (file, a, b) => new Uint8Array(await file.slice(a, b).arrayBuffer());
+
+      // zip 을 통째로 메모리에 올리지 않고 필요한 부분만 잘라 읽는다(큰 zip 대비)
       async function unzip(file) {
-        const buf = new Uint8Array(await file.arrayBuffer());
-        const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+        const size = file.size;
+        const tailStart = Math.max(0, size - 65557);
+        const tail = await readBytes(file, tailStart, size);
+        const tdv = new DataView(tail.buffer);
         let eocd = -1;
-        for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) {
-          if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+        for (let i = tail.length - 22; i >= 0; i--) {
+          if (tdv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
         }
         if (eocd < 0) throw new Error('zip 파일을 읽을 수 없습니다.');
-        const count = dv.getUint16(eocd + 10, true);
-        let p = dv.getUint32(eocd + 16, true);
-        if (p === 0xffffffff) throw new Error('너무 큰 zip(zip64)은 지원하지 않습니다.');
+        const count = tdv.getUint16(eocd + 10, true);
+        const cdSize = tdv.getUint32(eocd + 12, true);
+        const cdOffset = tdv.getUint32(eocd + 16, true);
+        if (cdOffset === 0xffffffff || count === 0xffff) throw new Error('4GB 넘는 zip(zip64)은 지원하지 않습니다.');
+        const cd = await readBytes(file, cdOffset, cdOffset + cdSize);
+        const dv = new DataView(cd.buffer);
         const out = [];
+        let p = 0;
         for (let n = 0; n < count; n++) {
           if (dv.getUint32(p, true) !== 0x02014b50) throw new Error('zip 구조가 올바르지 않습니다.');
           const flags = dv.getUint16(p + 8, true);
@@ -325,17 +329,21 @@
           const xlen = dv.getUint16(p + 30, true);
           const clen = dv.getUint16(p + 32, true);
           const lho = dv.getUint32(p + 42, true);
-          const name = decodeName(buf.subarray(p + 46, p + 46 + nlen), flags & 0x800);
+          const name = decodeName(cd.subarray(p + 46, p + 46 + nlen), flags & 0x800);
           p += 46 + nlen + xlen + clen;
           if (name.endsWith('/')) continue;
           if (flags & 1) throw new Error('암호가 걸린 zip 은 열 수 없습니다.');
-          const start = lho + 30 + dv.getUint16(lho + 26, true) + dv.getUint16(lho + 28, true);
-          const data = buf.subarray(start, start + csize);
-          let bytes;
-          if (method === 0) bytes = data.slice();
-          else if (method === 8) bytes = await inflateRaw(data);
-          else throw new Error(`지원하지 않는 압축 방식입니다 (${name}).`);
-          out.push({ path: name, blob: new Blob([bytes]) });
+          const lh = await readBytes(file, lho, lho + 30);
+          const ldv = new DataView(lh.buffer);
+          const dataStart = lho + 30 + ldv.getUint16(26, true) + ldv.getUint16(28, true);
+          const slice = file.slice(dataStart, dataStart + csize);
+          let blob;
+          if (method === 0) blob = slice;
+          else if (method === 8) {
+            if (typeof DecompressionStream === 'undefined') throw new Error('이 iPad 의 Safari 가 오래되어 압축을 풀 수 없습니다. iPadOS 를 업데이트하세요.');
+            blob = await new Response(slice.stream().pipeThrough(new DecompressionStream('deflate-raw'))).blob();
+          } else throw new Error(`지원하지 않는 압축 방식입니다 (${name}).`);
+          out.push({ path: name, blob });
         }
         return out;
       }
@@ -460,6 +468,24 @@
           busy(true, '보관하는 중…');
         }
 
+        const total = bundle.entries.reduce((n, e) => n + e.blob.size, 0);
+        if (navigator.storage && navigator.storage.estimate) {
+          try {
+            const est = await navigator.storage.estimate();
+            const free = (est.quota || 0) - (est.usage || 0) + (replacing ? replacing.size || 0 : 0);
+            if (est.quota && free < total * 1.05) {
+              busy(false);
+              const go = await dialog({
+                title: '저장 공간이 부족할 수 있습니다',
+                message: `필요: ${fmtSize(total)} / 남은 공간: ${fmtSize(Math.max(0, free))}\n안 쓰는 항목을 목록에서 지우거나 iPad 저장 공간을 비워 주세요.`,
+                buttons: [{ label: '취소', value: false }, { label: '그래도 시도', value: true, kind: 'primary' }],
+                cancelValue: false,
+              });
+              if (!go) return null;
+            }
+          } catch { /* 무시 */ }
+        }
+        busy(true, `보관하는 중… (${fmtSize(total)})`);
         const cache = await caches.open(APPS_CACHE);
         if (replacing) await deleteFiles(id);
         let size = 0;
@@ -468,13 +494,28 @@
           let body = e.blob;
           let type = MIME[extOf(e.path)] || 'application/octet-stream';
           if (isHTML(e.path)) {
-            const text = fixCharset(decodeText(new Uint8Array(await e.blob.arrayBuffer())));
-            if (e.path === start) title = titleOf(text);
-            body = new Blob([text], { type: 'text/html' });
             type = 'text/html; charset=utf-8';
+            const head = new TextDecoder('utf-8').decode(await readBytes(e.blob, 0, 262144));
+            const declared = (/<meta[^>]+charset\s*=\s*["']?([\w-]+)/i.exec(head) || [])[1] || '';
+            const notUTF8 = declared && !/^utf-?8$/i.test(declared);
+            if (e.blob.size <= BIG_HTML || notUTF8) {
+              // 작은 파일: 문자셋(EUC-KR 등)을 알아내 utf-8 로 바꿔 보관
+              const text = fixCharset(decodeText(new Uint8Array(await e.blob.arrayBuffer())));
+              if (e.path === start) title = titleOf(text);
+              body = new Blob([text], { type: 'text/html' });
+            } else {
+              // 큰 파일(그림을 품은 html 등): 원본 그대로 보관 — 메모리를 아낀다
+              if (e.path === start) title = titleOf(head);
+            }
           }
           size += body.size;
-          await cache.put(new Request(runURL(id, e.path)), new Response(body, { headers: { 'Content-Type': type } }));
+          try {
+            await cache.put(new Request(runURL(id, e.path)), new Response(body, { headers: { 'Content-Type': type } }));
+          } catch (err) {
+            await deleteFiles(id).catch(() => {});
+            if (replacing) saveMeta(loadMeta().filter((a) => a.id !== id));
+            throw new Error(`보관하지 못했습니다. iPad 저장 공간이 부족하거나, Safari 개인정보 보호 브라우징 중일 수 있습니다.\n(${e.path} · ${fmtSize(body.size)})`);
+          }
         }
         const now = Date.now();
         const meta = {
