@@ -2,7 +2,7 @@
 // - 실행기 화면 파일: 인터넷이 되면 최신, 안 되면 저장해 둔 것
 // - run/<앱id>/... 주소: 실행기에 보관한 html·파일을 꺼내 준다 (인터넷 없이도 열림)
 // 실행기 파일을 고치면 VERSION 숫자를 하나 올려 주세요.
-const VERSION = 'launcher-v2';
+const VERSION = 'launcher-v3';
 const APPS = 'html-apps'; // 보관한 앱 파일 (VERSION 이 바뀌어도 지우지 않음)
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
@@ -115,7 +115,7 @@ async function injectStream(res) {
     if (at >= 0) break;
   }
   if (at < 0) at = findInjectAt(buf.subarray(0, HEAD_LIMIT), true);
-  const script = new TextEncoder().encode(`<script>${injectedScript()}</script>`);
+  const script = new TextEncoder().encode(`<script>${injectedScript().replace(/\n/g, '')}</script>`); // 한 줄로(원본 줄 번호 유지)
   const first = buf.subarray(0, at);
   const rest = buf.subarray(at);
   const stream = new ReadableStream({
@@ -158,6 +158,10 @@ function injectedScript() {
   return `(function(){
 var HOME=${JSON.stringify(SCOPE)};
 try{if(navigator.serviceWorker){navigator.serviceWorker.register=function(){return Promise.reject(new Error('HTML 실행기 안에서는 앱 자체 서비스 워커를 쓰지 않습니다'));};}}catch(e){}
+var errs=[],showErr=null;
+function addErr(msg){msg=String(msg||'알 수 없는 오류').slice(0,300);if(errs.indexOf(msg)<0)errs.push(msg);if(showErr)showErr();}
+window.addEventListener('error',function(e){if(e&&e.message){addErr(e.message+(e.filename?' ('+String(e.filename).split('/').pop().slice(0,60)+(e.lineno?' '+e.lineno+'번째 줄':'')+')':''));}else if(e&&e.target&&e.target!==window&&(e.target.src||e.target.href)){var u=String(e.target.src||e.target.href);if(u.indexOf('data:')!==0)addErr('파일을 불러오지 못함: '+decodeURIComponent(u.split('/').pop()).slice(0,80));}},true);
+window.addEventListener('unhandledrejection',function(e){var r=e&&e.reason;addErr(r&&r.message?r.message:r);});
 function mount(){
 if(document.getElementById('__html_launcher__'))return;
 var host=document.createElement('div');host.id='__html_launcher__';
@@ -172,11 +176,18 @@ root.innerHTML='<style>'+
 '.menu button{display:block;width:100%;margin:0;padding:11px 14px;border:0;border-radius:9px;background:transparent;color:#E4E3DF;font:inherit;text-align:left;cursor:pointer}'+
 '.menu button:active{background:#2c2c32}'+
 '.menu button.home{color:#C9AE7C;font-weight:600}'+
+'.err{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 10px);transform:translateX(-50%);width:min(680px,calc(100vw - 24px));max-height:40vh;overflow:auto;padding:10px 40px 10px 14px;border-radius:12px;background:#3a1f1c;border:1px solid #7a3b33;color:#f3d6d0;font:13.5px/1.45 -apple-system,system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.5);white-space:pre-wrap;word-break:break-all}'+
+'.err[hidden]{display:none}.err b{color:#fff}'+
+'.err .x{position:absolute;right:6px;top:6px;width:28px;height:28px;border:0;border-radius:8px;background:transparent;color:#f3d6d0;font-size:18px;cursor:pointer}'+
 '</style>'+
+'<div class="err" hidden><button class="x" type="button" aria-label="닫기">×</button><b>이 페이지에서 오류가 났습니다</b><div class="list"></div></div>'+
 '<button class="fab" type="button" aria-label="HTML 실행기 메뉴"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg></button>'+
 '<div class="menu" hidden><button class="home" data-a="home" type="button">실행기 목록으로</button><button data-a="reload" type="button">새로고침</button><button data-a="cancel" type="button">닫기</button></div>';
 (document.documentElement||document.body).appendChild(host);
-var fab=root.querySelector('.fab'),menu=root.querySelector('.menu');
+var fab=root.querySelector('.fab'),menu=root.querySelector('.menu'),errBox=root.querySelector('.err');
+showErr=function(){errBox.querySelector('.list').textContent='\\n'+errs.slice(-6).map(function(m){return '• '+m;}).join('\\n');errBox.hidden=false;};
+errBox.querySelector('.x').addEventListener('click',function(){errBox.hidden=true;});
+if(errs.length)showErr();
 var KEY='__html_launcher__.fab',pos={x:1,y:.62};
 try{var s=JSON.parse(localStorage.getItem(KEY));if(s&&typeof s.x==='number')pos=s;}catch(e){}
 function place(){var W=window.innerWidth,H=window.innerHeight,m=8;
